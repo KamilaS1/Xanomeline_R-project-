@@ -44,6 +44,7 @@ library(flextable)
 - `ARM` — группа лечения
 
 1. Импортируйте данные.
+
 2. Какой формат у этих данных: длинный или широкий? Объясните ответ.
 3. Оставьте только нужные столбцы и переименуйте `USUBJID` в `ID`.
 
@@ -125,25 +126,85 @@ dm |>
 - `VISIT` — визит измерения
 
 1. Импортируйте данные.
+```{r}
+# Импортируем данные и сохраняем необходимые столбцы в lb_clean
+lb <- read_csv("data/lb.csv")
+lb_clean <- select(lb, USUBJID, LBTESTCD, LBTEST, LBSTRESN, VISIT)
+lb_clean
+```
 2. Какой формат у этих данных: длинный или широкий? Объясните ответ.
-   Какое минимальное и максимальное число строк на одного пациента?
+
+Формат данных - длинный, поскольку каждая следующая строка означает новое измерение для одного и того же USUBJD. В каждой сроке находится измерение одного показателя за один визит
+
+Какое минимальное и максимальное число строк на одного пациента?
+
+Минимальное количество строк 9, максимальное - 58
+```{r}
+# подсчет минимального и максимального количества строк
+rows_per_patient <- count(lb_clean, USUBJID, name = "n_rows")
+head (rows_per_patient)
+summary_table    <- summarise(rows_per_patient, min_rows = min(n_rows), max_rows = max(n_rows))
+flextable(summary_table)
+```   
+
 3. На каких визитах выполняли измерения и какие лабораторные показатели измеряли?
    Отдельно выведите или подчеркните визиты, на которых измеряли витамин B12.
 
 ```{r}
-# read_csv
-# select, rename
-# distinct, count
+# Визиты
+visits <- distinct(lb, VISIT)
+visits_sorted <- arrange(visits, VISIT)
+
+flextable(visits_sorted)
+
+```
+
+```{r}
+# Лабораторные тесты
+tests <- distinct(lb, LBTESTCD, LBTEST)
+tests_sorted <- arrange(tests, LBTESTCD)
+
+flextable(tests_sorted)
+```
+
+```{r}
+# Витамин В12
+b12_rows <- filter(lb, LBTESTCD == "VITB12")
+b12_visits <- distinct(b12_rows, VISIT)
+flextable(b12_visits)
 ```
 
 4. Оставьте только участников своей команды.
    Используйте для этого датафрейм `dm`, созданный координатором в разделе 1.1.
+```{r}
+# Импортируем таблицу, создаем список с названием необходимых групп, дальше фильтруем dm так, чтобы остались только те строки, где ARM входит в список team_arms (для нашей группы)
+dm <- read_csv("data/dm.csv")
+team_arms <- c("Placebo", "Xanomeline Low Dose")
+team_dm <- filter(dm, ARM %in% team_arms)
+flextable(team_dm)
+```
+
 5. Оставьте только два лабораторных показателя своей команды, измеренных на визите `SCREENING 1`.
-6. После фильтрации выведите число измерений каждого показателя.
 
 ```{r}
-# left_join, semi_join
-# filter
+# Записываем в переменную id участников нашей команды, потом обращаемся к lb и записываем в lb_team только те строки, для которых нашлось совпадение по team_ids, а затем создаем список с лабораторными показателями для нашей команды и фильтруем по этому списку 
+team_ids <- select(team_dm, USUBJID)
+lb_team <- semi_join(lb, team_ids, by = "USUBJID")
+team_tests <- c("HGB", "PLAT")
+lb_team_screening <- filter(lb_team, LBTESTCD %in% team_tests)
+
+flextable(lb_team_screening)
+```
+
+6. После фильтрации выведите число измерений каждого показателя.
+```{r}
+# Создаем таблицу, которая содержит упоминания уникальных пар кодов тестов, затем создаем таблицу, в которой ля каждого теста подсчитано количество его упоминаний и записано в n_measurments, а затем подтягиваем к этим измерениям колонку LBTEST с помощью left_join по LBTESTCD
+team_tests_info <- distinct(lb_team_screening, LBTESTCD, LBTEST)
+tests_count <- count(lb_team_screening, LBTESTCD, name = "n_measurements")
+tests_count_named <- left_join(tests_count, team_tests_info, by = "LBTESTCD")
+tests_count_sorted <- arrange(tests_count_named, LBTESTCD)
+flextable(tests_count_sorted)
+
 ```
 
 7. Переведите данные в широкий формат и сохраните в переменную `lb_wide`.
@@ -151,15 +212,24 @@ dm |>
    Идентификатор участника должен находиться в столбце с названием `ID`.
 
 ```{r}
-# select
-# pivot_wider
-# distinct, count
+# Меняем название колонки на ID, выбираем колонки с тестами и показателями, затем убираем дубликаты по ID и LBTESTCD, не трогая столбец с результатами. Переводим в широкий формат
+
+lb_team_screening <- rename(lb_team_screening, ID = USUBJID)
+lb_short <- select(lb_team_screening, ID, LBTESTCD, LBSTRESN)
+lb_short <- distinct(lb_short, ID, LBTESTCD, .keep_all = TRUE)
+lb_wide <- pivot_wider(
+  lb_short,
+  names_from  = LBTESTCD,
+  values_from = LBSTRESN
+)
+flextable(lb_wide)
 ```
 
 8. Проверьте, что `lb_wide` содержит ровно одну строку на одного участника.
 
 ```{r}
 # stopifnot, stop
+stopifnot(nrow(lb_wide) == n_distinct(lb_wide$ID))
 ```
 
 ### 1.3. Витальные показатели
