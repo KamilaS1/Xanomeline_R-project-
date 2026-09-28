@@ -446,6 +446,12 @@ stopifnot(nrow(gf_wide) == n_distinct(gf_wide$ID))
 
 ```{r}
 # left_join
+full_data <- dm |>
+  left_join(lb_wide, by = "ID") |>
+  left_join(vs_wide, by = "ID") |>
+  left_join(gf_wide, by = "ID")
+
+full_data
 ```
 
 Проверьте, что число строк в результате совпадает с числом участников в `dm` и что не появилось повторяющихся значений `ID`.
@@ -453,9 +459,36 @@ stopifnot(nrow(gf_wide) == n_distinct(gf_wide$ID))
 ```{r}
 # count, nrow
 # stopifnot, stop
+
+#Смотрим, есть ли в списке повторяющиеся ID, если ответ 0, значит повторов нет
+count(full_data, ID) |>
+  filter(n > 1)
+
+#Если проверка оказалась отрицацельной и повторы все-таки есть, используем следующий блок кода с пояснением
+stopifnot(
+  "Число строк не совпадает с числом участников в dm" = nrow(full_data) ==
+    nrow(dm),
+  "В объединённой таблице есть повторяющиеся ID" = n_distinct(full_data$ID) ==
+    nrow(full_data)
+)
 ```
 
 Для каждого столбца итогового датафрейма выведите число непустых и число пропущенных значений.
+
+```{r}
+tibble(
+  column = names(full_data),
+  non_missing = colSums(!is.na(full_data)),
+  missing = colSums(is.na(full_data))
+) |>
+  flextable() |>
+  set_header_labels(
+    column = "Столбец",
+    non_missing = "Непустых значений",
+    missing = "Пропущенных значений"
+  ) |>
+  autofit()
+```
 
 ## 3. Описательные статистики и отчёт
 
