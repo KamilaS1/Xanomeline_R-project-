@@ -4,9 +4,15 @@ author:
    - name: Сагитдинова Камила
      url: https://github.com/KamilaS1
      roles: Координатор
+   - name: Посаженникова Софья
+     roles: Витальные показатели
+     url: https://github.com/bombilidae
    - name: Штоль Виолетта
      url: https://github.com/Duseldworf
      roles: Генотипирование (gf)
+   - name: Пайметьева Дарья
+     url: https://github.com/Duseldworf
+     roles: Лабораторные измерения
 format:
   html:
     embed-resources: true
