@@ -10,6 +10,9 @@ author:
    - name: Штоль Виолетта
      url: https://github.com/Duseldworf
      roles: Генотипирование (gf)
+   - name: Пайметьева Дарья
+     url: https://github.com/Duseldworf
+     roles: Лабораторные измерения
 format:
   html:
     embed-resources: true
@@ -47,6 +50,7 @@ library(flextable)
 - `ARM` — группа лечения
 
 1. Импортируйте данные.
+
 2. Какой формат у этих данных: длинный или широкий? Объясните ответ.
 3. Оставьте только нужные столбцы и переименуйте `USUBJID` в `ID`.
 
@@ -128,25 +132,85 @@ dm |>
 - `VISIT` — визит измерения
 
 1. Импортируйте данные.
+```{r}
+# Импортируем данные и сохраняем необходимые столбцы в lb_clean
+lb <- read_csv("data/lb.csv")
+lb_clean <- select(lb, USUBJID, LBTESTCD, LBTEST, LBSTRESN, VISIT)
+lb_clean
+```
 2. Какой формат у этих данных: длинный или широкий? Объясните ответ.
-   Какое минимальное и максимальное число строк на одного пациента?
+
+Формат данных - длинный, поскольку каждая следующая строка означает новое измерение для одного и того же USUBJD. В каждой сроке находится измерение одного показателя за один визит
+
+Какое минимальное и максимальное число строк на одного пациента?
+
+Минимальное количество строк 9, максимальное - 58
+```{r}
+# подсчет минимального и максимального количества строк
+rows_per_patient <- count(lb_clean, USUBJID, name = "n_rows")
+head (rows_per_patient)
+summary_table    <- summarise(rows_per_patient, min_rows = min(n_rows), max_rows = max(n_rows))
+flextable(summary_table)
+```   
+
 3. На каких визитах выполняли измерения и какие лабораторные показатели измеряли?
    Отдельно выведите или подчеркните визиты, на которых измеряли витамин B12.
 
 ```{r}
-# read_csv
-# select, rename
-# distinct, count
+# Визиты
+visits <- distinct(lb, VISIT)
+visits_sorted <- arrange(visits, VISIT)
+
+flextable(visits_sorted)
+
+```
+
+```{r}
+# Лабораторные тесты
+tests <- distinct(lb, LBTESTCD, LBTEST)
+tests_sorted <- arrange(tests, LBTESTCD)
+
+flextable(tests_sorted)
+```
+
+```{r}
+# Витамин В12
+b12_rows <- filter(lb, LBTESTCD == "VITB12")
+b12_visits <- distinct(b12_rows, VISIT)
+flextable(b12_visits)
 ```
 
 4. Оставьте только участников своей команды.
    Используйте для этого датафрейм `dm`, созданный координатором в разделе 1.1.
+```{r}
+# Импортируем таблицу, создаем список с названием необходимых групп, дальше фильтруем dm так, чтобы остались только те строки, где ARM входит в список team_arms (для нашей группы)
+dm <- read_csv("data/dm.csv")
+team_arms <- c("Placebo", "Xanomeline Low Dose")
+team_dm <- filter(dm, ARM %in% team_arms)
+flextable(team_dm)
+```
+
 5. Оставьте только два лабораторных показателя своей команды, измеренных на визите `SCREENING 1`.
-6. После фильтрации выведите число измерений каждого показателя.
 
 ```{r}
-# left_join, semi_join
-# filter
+# Записываем в переменную id участников нашей команды, потом обращаемся к lb и записываем в lb_team только те строки, для которых нашлось совпадение по team_ids, а затем создаем список с лабораторными показателями для нашей команды и фильтруем по этому списку 
+team_ids <- select(team_dm, USUBJID)
+lb_team <- semi_join(lb, team_ids, by = "USUBJID")
+team_tests <- c("HGB", "PLAT")
+lb_team_screening <- filter(lb_team, LBTESTCD %in% team_tests)
+
+flextable(lb_team_screening)
+```
+
+6. После фильтрации выведите число измерений каждого показателя.
+```{r}
+# Создаем таблицу, которая содержит упоминания уникальных пар кодов тестов, затем создаем таблицу, в которой ля каждого теста подсчитано количество его упоминаний и записано в n_measurments, а затем подтягиваем к этим измерениям колонку LBTEST с помощью left_join по LBTESTCD
+team_tests_info <- distinct(lb_team_screening, LBTESTCD, LBTEST)
+tests_count <- count(lb_team_screening, LBTESTCD, name = "n_measurements")
+tests_count_named <- left_join(tests_count, team_tests_info, by = "LBTESTCD")
+tests_count_sorted <- arrange(tests_count_named, LBTESTCD)
+flextable(tests_count_sorted)
+
 ```
 
 7. Переведите данные в широкий формат и сохраните в переменную `lb_wide`.
@@ -154,15 +218,24 @@ dm |>
    Идентификатор участника должен находиться в столбце с названием `ID`.
 
 ```{r}
-# select
-# pivot_wider
-# distinct, count
+# Меняем название колонки на ID, выбираем колонки с тестами и показателями, затем убираем дубликаты по ID и LBTESTCD, не трогая столбец с результатами. Переводим в широкий формат
+
+lb_team_screening <- rename(lb_team_screening, ID = USUBJID)
+lb_short <- select(lb_team_screening, ID, LBTESTCD, LBSTRESN)
+lb_short <- distinct(lb_short, ID, LBTESTCD, .keep_all = TRUE)
+lb_wide <- pivot_wider(
+  lb_short,
+  names_from  = LBTESTCD,
+  values_from = LBSTRESN
+)
+flextable(lb_wide)
 ```
 
 8. Проверьте, что `lb_wide` содержит ровно одну строку на одного участника.
 
 ```{r}
 # stopifnot, stop
+stopifnot(nrow(lb_wide) == n_distinct(lb_wide$ID))
 ```
 
 ### 1.3. Витальные показатели
@@ -177,37 +250,13 @@ dm |>
 
 1. Импортируйте данные.
 2. Какой формат у этих данных: длинный или широкий? Объясните ответ.
-Данные представлены в длинном формате, так как на каждого участника исследования приходится больше одной строки, это можно наблюдать при выводе таблицы из vs.csv. Также при проверке с использованием функции 'count' выводится точное количество строк занимаемых каждым участником.
    Какое минимальное и максимальное число строк на одного участника?
-   Вычисление проводилось с использованием функции 'summarise', которая вывела минимальное количество строк, занимаемых участником - 21 и максимальное количество строк, занимаемых участником - 71.
 3. На каких визитах измеряли рост (`HEIGHT`) и вес (`WEIGHT`)?
-Рост и вес измеряли на следующих визитах: BASELINE, SCREENING 1, WEEK 12, WEEK 2, WEEK 4, WEEK 6, WEEK 8
 
 ```{r}
 # read_csv
 # select, rename
 # count
-vs <- read.csv("data/vs.csv") |>
-  select(
-    ID = USUBJID,
-    TEST_CODE = VSTESTCD,
-    TEST = VSTEST,
-    RESULT = VSSTRESN,
-    VISIT
-  )
-vs
-
-vs |> count(ID) # показывает сколько строк занимает ID одного участника
-
-vs |>
-  count(ID) |> # показывает сколько строк занимает ID одного участника
-  summarise(
-    min_rows = min(n), # с помощью summarise ищем участника с минимальным количеством строк
-    max_rows = max(n) # аналогично ищем участника с максимальным количеством строк
-  )
-vs |>
-  filter(TEST_CODE %in% c("HEIGHT", "WEIGHT")) |> # фильтруем, оставляя строки только с Height и Weight
-  count(TEST_CODE, VISIT) #считает на каких визитах измеряли рост и вес
 ```
 
 4. Оставьте только участников своей команды.
@@ -217,13 +266,6 @@ vs |>
 ```{r}
 # left_join, semi_join
 # filter
-vs_team <- vs |>
-  semi_join(dm, "ID") |>
-  filter(
-    (TEST_CODE %in% c("HEIGHT", "WEIGHT") & VISIT == "SCREENING 1") |
-      (TEST_CODE == "WEIGHT" & VISIT == "WEEK 4") # фильтруем, чтобы в итоге остались измерения роста и веса в первый скрининг, и измерения веса на 4 неделе
-  )
-vs_team |> count(TEST_CODE, VISIT) #проверка, что точно добавились измерения роста и веса в визиты: SCREENING1 и WEEK 4
 ```
 
 6. Переведите данные в широкий формат и сохраните в переменной `vs_wide`.
@@ -236,29 +278,12 @@ vs_team |> count(TEST_CODE, VISIT) #проверка, что точно доба
 # distinct, count
 # str_c, paste0
 # pivot_wider
-vs_unique <- vs_team |>
-  mutate(TEST_VISIT = paste0(TEST, "_", VISIT)) # создаем уникальные имена для измерений склеиваем Тест и визит
-
-vs_unique |>
-  count(ID, TEST_VISIT) |> # считаем сколько раз встречается каждая комбинация теста и пациента
-  filter(n > 1) # проверяем, что отсутствуют дубликаты, если вывелось 0 строк, значит все в единственном экземпляре
-
-vs_wide <- vs_unique |>
-  select(ID, TEST_VISIT, RESULT) |>
-  distinct() |> # удаление дубликатов
-  pivot_wider(
-    # переводим в широокий формат
-    names_from = TEST_VISIT, # указываем откуда взять названия и числовые значения
-    values_from = RESULT
-  )
-vs_wide
 ```
 
 7. Проверьте, что `vs_wide` содержит ровно одну строку на участника.
 
 ```{r}
 # stopifnot, stop
-stopifnot(nrow(vs_wide) == n_distinct(vs_wide$ID)) # если нет ошибки, то у каждого пациента одна строка
 ```
 
 ### 1.4. Генотип APOE
