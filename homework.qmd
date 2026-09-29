@@ -669,11 +669,101 @@ flextable(stats_apoe) |>
 4. Кратко прокомментируйте результаты, приведённые в таблицах.
 
 ```{r}
-# mutate, case_when, group_by, summarise
-# n, mean, median, sd, quantile, IQR
-# flextable
-# см. документацию https://davidgohel.github.io
+# Число и процент участников с каждым генотипом APOE по группам лечения
+
+# создаем датасет для анализа 4 команды
+df_filtered <- full_data |> 
+  filter(ARM %in% c("Placebo", "Xanomeline Low Dose")) |>  
+  mutate(
+    ARM = factor(ARM, levels = c("Placebo", "Xanomeline Low Dose")),
+    BMI = `Weight_WEEK 4` / ((`Height_SCREENING 1` / 100)^2)
+  )
+
+# расчет частоты генотипов
+apoe_distribution <- df_filtered |> 
+  group_by(ARM, `Генотип APOE`) |> 
+  summarise(n = n(), .groups = "drop_last") |> 
+  mutate(pct = (n / sum(n)) * 100) |> 
+  ungroup() |> 
+  mutate(count_pct = str_c(n, " (", round(pct, 2), "%)")) |> 
+  select(ARM, `Генотип APOE`, count_pct) |> 
+  pivot_wider(names_from = ARM, values_from = count_pct, values_fill = "0 (0.00%)")
+
+# передаем готовую таблицу в функцию flextable
+apoe_distribution |> 
+  flextable() |> 
+  set_header_labels(
+    `Генотип APOE` = "Генотип APOE",
+    Placebo = "Группа Placebo",
+    `Xanomeline Low Dose` = "Группа Xanomeline Low Dose"
+  ) |> 
+  theme_vanilla() |> 
+  autofit()
 ```
+
+Доминирующим является генотип ε3/ε3 (41 участник в группе Placebo и 27 - в Xanomeline Low Dose), а также генотип ε3/ε4 (31 и 38 участников соответственно). Самый редкий генотип ε4/ε4 - всего 3 участника. В группах плацебо и препарата распредление генотипов примерно одинаковое, что говорит о хорошем делении пациентов.
+
+
+```{r}
+# Статистики BMI и лабораторных показателей в зависимости от генотипа APOE
+
+# переводим показатели в длинный формат
+stats_long <- df_filtered |> 
+  select(ID, `Генотип APOE`, BMI, HGB, PLAT) |> 
+  pivot_longer(
+    cols = c(BMI, HGB, PLAT), 
+    names_to = "Parameter", 
+    values_to = "Value"
+  )
+
+# расчет описательных медицинских статистик
+apoe_metrics_stats <- stats_long |> 
+  group_by(`Генотип APOE`, Parameter) |> 
+  summarise(
+    n_nonmissing = sum(!is.na(Value)),
+    n_missing = sum(is.na(Value)),
+    mean_sd = str_c(
+      round(mean(Value, na.rm = TRUE), 2), " (",
+      round(sd(Value, na.rm = TRUE), 2), ")"
+    ),
+    median_iqr = str_c(
+      round(median(Value, na.rm = TRUE), 2), " [",
+      round(quantile(Value, 0.25, na.rm = TRUE), 2), "; ",
+      round(quantile(Value, 0.75, na.rm = TRUE), 2), "]"
+    ),
+    min_max = str_c(
+      round(min(Value, na.rm = TRUE), 2), " – ",
+      round(max(Value, na.rm = TRUE), 2)
+    ),
+    .groups = "drop"
+  ) |> 
+  mutate(Parameter = case_when(
+    Parameter == "BMI"  ~ "ИМТ (BMI), кг/м² (WEEK 4)",
+    Parameter == "HGB"  ~ "HGB (Гемоглобин), г/л",
+    Parameter == "PLAT" ~ "PLAT (Тромбоциты), ×10⁹/л",
+    TRUE ~ Parameter
+  ))
+
+# передаем большую расчетную таблицу в flextable
+apoe_metrics_stats |> 
+  flextable() |> 
+  set_header_labels(
+    `Генотип APOE` = "Генотип APOE",
+    Parameter     = "Показатель",
+    n_nonmissing  = "N (непустых)",
+    n_missing     = "Пропущено",
+    mean_sd       = "Среднее (СО)",
+    median_iqr    = "Медиана [Q1; Q3]",
+    min_max       = "Мин. – Макс."
+  ) |> 
+  merge_v(j = "Генотип APOE") |> 
+  theme_vanilla() |> 
+  fix_border_issues() |> 
+  autofit()
+```
+
+Медианные и средние значения ИМТ для большинства генотипов укладываются в диапазон клинической нормы (от 23.02 до 25.02 кг/м²). Несколько выделяется группа ε4/ε4 со средним ИМТ 28.41 кг/м², соответствующим избыточной массе тела, однако из-за малого объема группы делать клинические выводы о связи генотипа с весом нельзя. Максимальный ИМТ в выборке зафиксирован у носителя генотипа ε3/ε4 (40.0 кг/м²), а минимальный - у носителя ε3/ε3 (15.31 кг/м²).
+Показатели гемоглобина и тромбоцитов на скрининге демонстрируют стабильность во всех генетических группах. Средние значения гемоглобина варьируют от 7.76 г/л (у ε4/ε4) до 8.79 г/л (у ε2/ε3), а тромбоцитов — от 224.44 до 253.05 ×10⁹/л. Минимумы и максимумы совпадают с результатами из раздела 3.1
 
 ## 4. Дополнительные задания
 
