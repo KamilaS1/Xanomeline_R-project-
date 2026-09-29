@@ -199,7 +199,7 @@ flextable(team_dm)
 #team_ids <- select(team_dm, USUBJID)
 lb_team <- semi_join(lb, team_dm, join_by(USUBJID == ID))
 team_tests <- c("HGB", "PLAT")
-lb_team_screening <- filter(lb_team, LBTESTCD %in% team_tests)
+lb_team_screening <- filter(lb_team, LBTESTCD %in% team_tests, VISIT == "SCREENING 1")
 
 flextable(lb_team_screening)
 ```
@@ -513,6 +513,29 @@ tibble(
 4. Кратко прокомментируйте результаты, приведённые в таблицах.
 
 ```{r}
+# Переводим lb_wide в длинный формат и добавляем признак носительства ε4
+lb_long <- lb_wide |>
+  pivot_longer(
+    cols = c(HGB, PLAT),
+    names_to = "LBTESTCD",
+    values_to = "LBSTRESN"
+  ) |>
+  left_join(
+    select(dm, ID, ARM),
+    by = "ID"
+  ) |>
+  left_join(
+    select(gf_wide, ID, `Генотип APOE`),
+    by = "ID"
+  ) |>
+  mutate(
+    `Носитель ε4` = case_when(
+      `Генотип APOE` %in% c("ε2/ε4", "ε3/ε4", "ε4/ε4") ~ "Носитель ε4",
+      `Генотип APOE` %in% c("ε2/ε2", "ε2/ε3", "ε3/ε3") ~ "Не носитель ε4",
+      TRUE ~ NA_character_
+    )
+  )
+flextable (lb_long)
 # mutate, case_when, group_by, summarise
 # n, mean, median, sd, quantile, IQR
 
@@ -520,6 +543,94 @@ tibble(
 # flextable
 # см. документацию https://davidgohel.github.io
 ```
+
+```{r}
+# Статистики по каждой группе
+stats_arm <- lb_long |>
+  group_by(ARM, LBTESTCD) |>
+  summarise(
+    n_nonmissing = n() - sum(is.na(LBSTRESN)),
+    n_missing    = sum(is.na(LBSTRESN)),
+    mean_sd      = str_c(
+      round(mean(LBSTRESN, na.rm = TRUE), 2), " (",
+      round(sd(LBSTRESN, na.rm = TRUE), 2), ")"
+    ),
+    median_iqr   = str_c(
+      round(median(LBSTRESN, na.rm = TRUE), 2), " [",
+      round(quantile(LBSTRESN, 0.25, na.rm = TRUE), 2), "; ",
+      round(quantile(LBSTRESN, 0.75, na.rm = TRUE), 2), "]"
+    ),
+    min_max      = str_c(
+      round(min(LBSTRESN, na.rm = TRUE), 2), " – ",
+      round(max(LBSTRESN, na.rm = TRUE), 2)
+    ),
+    .groups = "drop"
+  ) |>
+  mutate(
+    LBTESTCD = case_when(
+      LBTESTCD == "HGB"  ~ "HGB, г/л",
+      LBTESTCD == "PLAT" ~ "PLAT, ×10⁹/л",
+      TRUE ~ LBTESTCD
+    )
+  )
+
+flextable(stats_arm) |>
+  set_header_labels(
+    ARM          = "Группа лечения",
+    LBTESTCD     = "Показатель",
+    n_nonmissing = "N (непустых)",
+    n_missing    = "Пропущено",
+    mean_sd      = "Среднее (СО)",
+    median_iqr   = "Медиана [Q1; Q3]",
+    min_max      = "Мин. – Макс."
+  ) |>
+  autofit()
+```
+
+```{r}
+# Статистики по носительству
+stats_apoe <- lb_long |>
+  group_by(`Носитель ε4`, LBTESTCD) |>
+  summarise(
+    n_nonmissing = n() - sum(is.na(LBSTRESN)),
+    n_missing    = sum(is.na(LBSTRESN)),
+    mean_sd      = str_c(
+      round(mean(LBSTRESN, na.rm = TRUE), 2), " (",
+      round(sd(LBSTRESN, na.rm = TRUE), 2), ")"
+    ),
+    median_iqr   = str_c(
+      round(median(LBSTRESN, na.rm = TRUE), 2), " [",
+      round(quantile(LBSTRESN, 0.25, na.rm = TRUE), 2), "; ",
+      round(quantile(LBSTRESN, 0.75, na.rm = TRUE), 2), "]"
+    ),
+    min_max      = str_c(
+      round(min(LBSTRESN, na.rm = TRUE), 2), " – ",
+      round(max(LBSTRESN, na.rm = TRUE), 2)
+    ),
+    .groups = "drop"
+  ) |>
+  mutate(
+    LBTESTCD = case_when(
+      LBTESTCD == "HGB"  ~ "HGB, г/л",
+      LBTESTCD == "PLAT" ~ "PLAT, ×10⁹/л",
+      TRUE ~ LBTESTCD
+    )
+  )
+
+flextable(stats_apoe) |>
+  set_header_labels(
+    `Носитель ε4` = "Носительство ε4",
+    LBTESTCD      = "Показатель",
+    n_nonmissing  = "N (непустых)",
+    n_missing     = "Пропущено",
+    mean_sd       = "Среднее (СО)",
+    median_iqr    = "Медиана [Q1; Q3]",
+    min_max       = "Мин. – Макс."
+  ) |>
+  autofit()
+```
+
+По таблицам видно, что HGB и PLAT в группах Placebo и Xanomeline Low Dose на SCREENING 1 примерно одинаковые — средние и медианы близки, разброс тоже. У носителей и неносителей ε4 значения тоже сопоставимы, заметных различий нет, только разброс у носителей чуть шире. Минимум и максимум в обеих таблицах совпадают, значит расчёты согласованы.
 
 ### 3.2. Анализ витальных показателей
 
