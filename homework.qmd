@@ -654,8 +654,179 @@ flextable(stats_apoe) |>
 # n, mean, median, sd, quantile, IQR
 # flextable
 # см. документацию https://davidgohel.github.io
+bmi_data <- full_data |> #вычисление BMI на скрининге
+  mutate(
+    BMI = `Weight_SCREENING 1` / (`Height_SCREENING 1` / 100)^2 # вычисление ИМТ, рост делится на 100, чтобы перевести см в метры
+  )
+bmi_data
 ```
 
+```{r}
+bmi_data <- bmi_data |>
+  # создаем столбец с категориями ИМТ
+  mutate(
+    BMI_CATEGORY = case_when(
+      BMI >= 18.5 & BMI < 25 ~ "Норма",
+      BMI < 18.5 | BMI >= 25 ~ "Не норма",
+      TRUE ~ NA # если в таблице будут пропущенные значения
+    )
+  )
+bmi_data
+```
+
+```{r}
+# количественный показатель
+statistic_ARM_quant <- bmi_data |>
+  group_by(ARM) |> #группируем данные по лечебным группам
+  summarise(
+    Mean_BMI = mean(BMI, na.rm = TRUE), # подсчет среднего значения
+    SD_BMI = sd(BMI, na.rm = TRUE), # вычисление стандартного отклонения
+    N_non_missing = sum(!is.na(BMI)), # числонепустых значений
+    N_missing = sum(is.na(BMI)), # число пропущенных значений
+    Median_BMI = median(BMI, na.rm = TRUE), # вычисление медианы
+    Quantile_25_BMI = quantile(BMI, 0.25, na.rm = TRUE), # 25-й процентиль
+    Quantile_75_BMI = quantile(BMI, 0.75, na.rm = TRUE), # 75-й процентиль
+    Min_BMI = min(BMI, na.rm = TRUE), #вычисление минимального ИМТ
+    Max_BMI = max(BMI, na.rm = TRUE) # вычисление максимального ИМТ
+  )
+statistic_ARM_quant
+```
+
+```{r}
+# категория норма/не норма
+statistic_ARM_category <- bmi_data |>
+  group_by(ARM, BMI_CATEGORY) |>
+  summarise(Number = n()) |>
+  group_by(ARM) |> #еще раз группировка, чтобы посчитать проценты по группам лечения
+  mutate(
+    total_sum = sum(Number), # сумма всех человек в группе
+    percent = round((Number / total_sum) * 100, 2), # вычисление процента и округляем до второго знака после запятой
+    # объединим столбцы с числом участников(Number) и процентом в формат число (процент %)
+    combined_num_per_1 = paste0(Number, " (", percent, "%)")
+  ) |>
+  select(ARM, BMI_CATEGORY, combined_num_per_1) |> # выбираем нужные колонки
+  # категории переносятся в колонки, а числа и проценты в их значения
+  pivot_wider(
+    names_from = BMI_CATEGORY,
+    values_from = combined_num_per_1
+  )
+statistic_ARM_category
+```
+
+```{r}
+unique(bmi_data$`Генотип APOE`) # узнаем какие генотипы APOE вообще есть
+```
+```{r}
+# подсчет количества для каждого участника
+apoe_bmi <- bmi_data |>
+  mutate(
+    Apoe_num = case_when(
+      `Генотип APOE` == "ε4/ε4" ~ 2,
+      `Генотип APOE` == "ε3/ε4" ~ 1,
+      `Генотип APOE` == "ε2/ε4" ~ 1,
+      TRUE ~ 0
+    )
+  )
+apoe_bmi
+```
+
+```{r}
+# количественный показатель APOE
+statistic_APOE_quant <- apoe_bmi |>
+  group_by(Apoe_num) |> #группируем данные по числу аллелей
+  summarise(
+    Mean_BMI = mean(BMI, na.rm = TRUE), # подсчет среднего значения
+    SD_BMI = sd(BMI, na.rm = TRUE), # вычисление стандартного отклонения
+    N_non_missing = sum(!is.na(BMI)), # числонепустых значений
+    N_missing = sum(is.na(BMI)), # число пропущенных значений
+    Median_BMI = median(BMI, na.rm = TRUE), # вычисление медианы
+    Quantile_25_BMI = quantile(BMI, 0.25, na.rm = TRUE), # 25-й процентиль
+    Quantile_75_BMI = quantile(BMI, 0.75, na.rm = TRUE), # 75-й процентиль
+    Min_BMI = min(BMI, na.rm = TRUE), #вычисление минимального ИМТ
+    Max_BMI = max(BMI, na.rm = TRUE) # вычисление максимального ИМТ
+  )
+statistic_APOE_quant
+```
+
+```{r}
+# по категориям норма/не норма APOE
+statistic_APOE_category <- apoe_bmi |>
+  group_by(Apoe_num, BMI_CATEGORY) |>
+  summarise(Number = n()) |>
+  group_by(Apoe_num) |> # перегруппировка, чтобы посчитать проценты по группам аллелей (т.е 0, 1, 2)
+  mutate(
+    total_sum = sum(Number), # сумма всех человек в группе
+    percent = round((Number / total_sum) * 100, 2), # вычисление процента и округляем до второго знака после запятой
+    # объединим столбцы с числом участников(Number) и процентом в формат число (процент %)
+    combined_num_per_2 = paste0(Number, " (", percent, "%)")
+  ) |>
+  select(Apoe_num, BMI_CATEGORY, combined_num_per_2) |> # выбираем нужные колонки
+  # категории переносятся в колонки, а числа и проценты в их значения
+  pivot_wider(
+    names_from = BMI_CATEGORY,
+    values_from = combined_num_per_2
+  )
+statistic_APOE_category
+```
+
+```{r}
+# flextable для statistic_ARM_quant
+flextable(statistic_ARM_quant) |>
+  set_header_labels(
+    ARM = "Группа лечения",
+    Mean_BMI = "Среднее значение ИМТ",
+    SD_BMI = "Стандартное отклонение",
+    Median_BMI = "Медианное значение ИМТ",
+    N_non_missing = "Число непустых значений",
+    N_missing = "Число пропущенных значений",
+    Quantile_25_BMI = "25-й процентиль",
+    Quantile_75_BMI = "75-й процентиль",
+    Min_BMI = "Минимальный ИМТ",
+    Max_BMI = "Максимальный ИМТ"
+  ) |>
+  autofit()
+```
+Среднее значение ИМТ у участников данного скрининга в группе Placebo составил 23,65, в группе Xanomeline Low Dose 24,97, в группе Xanomeline High Dose 25,44. Средние значения во всех группах являются схожими, стандартные отклонения также имеют близкие значения (3,65-4,31), следовательно, степень разброса также является схожей между группами. Медианные значения близки к средним в каждой из групп и меквартильные интервалы также являются сопоставимыми (21,08; 25,72 - Placebo, 22,03; 27,90 - Xanomeline Low Dose, 22,99; 28,08 - Xanomeline Hight Dose). Участники исследования имели разные ИМТ начиная от недостаточной массы тела (<18.5), до избыточной массы тела (>=25). Минимальная масса тела составила 14.98, а максимальная 39,82. Данные ИМТ получены были у каждого из 254 участников, пропущенные значения отсутствуют.
+```{r}
+# statistic_APOE_quant
+flextable(statistic_APOE_quant) |>
+  set_header_labels(
+    Apoe_num = "Число аллелей, ε4",
+    Mean_BMI = "Среднее значение ИМТ",
+    SD_BMI = "Стандартное отклонение",
+    Median_BMI = "Медианное значение ИМТ",
+    N_non_missing = "Число непустых значений",
+    N_missing = "Число пропущенных значений",
+    Quantile_25_BMI = "25-й процентиль",
+    Quantile_75_BMI = "75-й процентиль",
+    Min_BMI = "Минимальный ИМТ",
+    Max_BMI = "Максимальный ИМТ"
+  ) |>
+  autofit()
+```
+При разделении по числу аллелей ε4 (0,1,2) средний ИМТ для всех трех групп имел схожие значения (0 аллелей - 24,64; 1 аллель - 24,79, 2 аллели - 23,84). Средние значения, медианные значения и значения 25 и 75 процентилей также являются схожими для всех групп. Пропущенные значения отстутствуют. Однако группа участников с 2 аллелями (9 участников) является слишком малочисленной в сравнении с другими (137 участников - 0 аллелей, 108 - 1 аллель).
+```{r}
+# flextable для statistic_ARM_category
+flextable(statistic_ARM_category) |>
+  set_header_labels(
+    ARM = "Группа лечения",
+    `Норма` = "Норма ИМТ, число участников (%)",
+    `Не норма` = "Не норма ИМТ, число участников (%)"
+  ) |>
+  autofit()
+```
+Доля пациентов с нормальной ИМТ составила 63,95% для группы Placebo, для группы Xanomeline Low Dose - 54,76%, а для Xanomeline High Dose также 54,76%. В группе Placebo на 9,19% больше людей с нормальной ИМТ(от 18.5 до 25), чем в других. Следовательно в группе Placebo ниже процент людей с ненормальным ИМТ (больше 25) - 36,05%, когда в группах Xanomeline Low Dose и Xanomeline High Dose их процент составил 45,24.
+```{r}
+# flextable для statistic_APOE_category
+flextable(statistic_APOE_category) |>
+  set_header_labels(
+    Apoe_num = "Число аллелей, ε4",
+    `Норма` = "Норма ИМТ, число участников (%)",
+    `Не норма` = "Не норма ИМТ, число участников (%)"
+  ) |>
+  autofit()
+```
+Процент пациентов с нормальным ИМТ составила для людей с отсутствием аллели гена ε4: 57,66%, для носителей одной аллели - 57,41% и для носителей двух аллелей - 66,67%. Проценты людей с ИМТ выходящей за значения нормы: 42,34%, 42,59%, 33,33%, соответственно. Различия между группами участников с отсутствием аллелей и 1 аллелью минимальные, при этом в группе с 2 аллелями малое количество участников (9), поэтому результат по ней трудно достоверно сравнить.
 ### 3.3. Анализ генотипа
 
 1. Для каждой группы лечения рассчитайте число и процент участников с каждым генотипом APOE.
