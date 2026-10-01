@@ -18,10 +18,6 @@ format:
     embed-resources: true
 ---
 
-Каждый **самостоятельно** заполняет сведения о себе в разделе `author` выше, делает коммит и загружает в репозиторий.
-В поле `url` укажите ссылку на свой GitHub.
-В поле `roles` укажите свою роль или данные, за которые отвечаете.
-См. [документацию Quarto](https://quarto.org/docs/authoring/front-matter.html#authors-and-affiliations).
 
 ```{r}
 #| include: false
@@ -29,10 +25,23 @@ library(tidyverse)
 library(flextable)
 # пакеты подключаются в первом чанке
 ```
+ 
 
-Это пример клинического исследования с двумя дозами препарата Xanomeline и группой Placebo.
-Каждая команда анализирует только группы и параметры, указанные для её варианта.
-Напишите номер своего варианта и замените этот текст описанием, какие показатели и на каких визитах будут анализироваться.
+**Вариант 4.** Группы: Placebo и Xanomeline Low Dose; лабораторные показатели: HGB и PLAT; визит команды: WEEK 4.
+Анализируются участники групп Placebo и Xanomeline Low Dose (170 человек: 86 и 84 соответственно). Группа Xanomeline High Dose и участники, не прошедшие скрининг (Screen Failure), в анализ не включаются. 
+
+Анализируемые показатели и визиты:
+
+- **Демографические данные** (`dm.csv`): возраст, пол, группа лечения.
+
+- **Лабораторные показатели** (`lb.csv`): гемоглобин (HGB, ммоль/л) и тромбоциты
+  (PLAT, ×10⁹/л) на визите SCREENING 1.
+
+- **Витальные показатели** (`vs.csv`): рост (см) и вес (кг) на визите SCREENING 1, вес на визите команды WEEK 4. По росту и весу на SCREENING 1 рассчитывается индекс массы тела (ИМТ, кг/м²) и его категория: норма или не норма. 
+
+- **Генотип APOE** (`gf.csv`): варианты rs429358 и rs7412, определённые на визите SCREENING 1. По ним устанавливаются генотип APOE (ε2/ε3, ε3/ε4 и т. д.), наличие аллеля ε4 и число аллелей ε4 (0, 1 или 2).
+
+Показатели сравниваются между группами лечения, а также в зависимости от генотипа APOE и аллеля ε4.
 
 ## 1. Импорт и очистка данных
 
@@ -63,8 +72,8 @@ dm <- read_csv('data/dm.csv') |>
   select(ID = USUBJID, AGE, SEX, ARM)
 dm
 
-nrow(dm)
-table(table(dm$ID))
+print(paste("Число строк в таблице", nrow(dm)))
+print(paste("Количество идентификаторов", table(table(dm$ID))))
 count(dm, ID) |>
   filter(n > 1)
 ```
@@ -96,17 +105,23 @@ stopifnot(nrow(dm) == n_distinct(dm$ID))
 # mutate
 # factor
 
-nrow(dm) #кол-во участников, оцененных для включения в исследование
+print(paste(
+  "Общее количество людей, оцененных для включения в исследование =",
+  nrow(dm)
+)) #кол-во участников, оцененных для включения в исследование
 
-sum((dm$ARM == "Screen Failure")) / nrow(dm) * 100 #процент, не прошедший скрининг
+print(paste(
+  "Процент пациентов, прошедших скрининг =",
+  round(sum((dm$ARM == "Screen Failure")) / nrow(dm) * 100, 2)
+)) #процент, не прошедший скрининг
 
 dm <- read_csv('data/dm.csv') |>
   select(ID = USUBJID, AGE, SEX, ARM) |>
-  filter(ARM != "Screen Failure") |>
+  filter(ARM %in% c("Placebo", "Xanomeline Low Dose")) |>
   mutate(
     ARM = factor(
       ARM,
-      c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+      c("Placebo", "Xanomeline Low Dose")
     )
   )
 dm
@@ -199,7 +214,11 @@ flextable(team_dm)
 #team_ids <- select(team_dm, USUBJID)
 lb_team <- semi_join(lb, team_dm, join_by(USUBJID == ID))
 team_tests <- c("HGB", "PLAT")
-lb_team_screening <- filter(lb_team, LBTESTCD %in% team_tests, VISIT == "SCREENING 1")
+lb_team_screening <- filter(
+  lb_team,
+  LBTESTCD %in% team_tests,
+  VISIT == "SCREENING 1"
+)
 
 flextable(lb_team_screening)
 ```
@@ -535,7 +554,7 @@ lb_long <- lb_wide |>
       TRUE ~ NA_character_
     )
   )
-flextable (lb_long)
+flextable(lb_long)
 # mutate, case_when, group_by, summarise
 # n, mean, median, sd, quantile, IQR
 
@@ -550,25 +569,31 @@ stats_arm <- lb_long |>
   group_by(ARM, LBTESTCD) |>
   summarise(
     n_nonmissing = n() - sum(is.na(LBSTRESN)),
-    n_missing    = sum(is.na(LBSTRESN)),
-    mean_sd      = str_c(
-      round(mean(LBSTRESN, na.rm = TRUE), 2), " (",
-      round(sd(LBSTRESN, na.rm = TRUE), 2), ")"
+    n_missing = sum(is.na(LBSTRESN)),
+    mean_sd = str_c(
+      round(mean(LBSTRESN, na.rm = TRUE), 2),
+      " (",
+      round(sd(LBSTRESN, na.rm = TRUE), 2),
+      ")"
     ),
-    median_iqr   = str_c(
-      round(median(LBSTRESN, na.rm = TRUE), 2), " [",
-      round(quantile(LBSTRESN, 0.25, na.rm = TRUE), 2), "; ",
-      round(quantile(LBSTRESN, 0.75, na.rm = TRUE), 2), "]"
+    median_iqr = str_c(
+      round(median(LBSTRESN, na.rm = TRUE), 2),
+      " [",
+      round(quantile(LBSTRESN, 0.25, na.rm = TRUE), 2),
+      "; ",
+      round(quantile(LBSTRESN, 0.75, na.rm = TRUE), 2),
+      "]"
     ),
-    min_max      = str_c(
-      round(min(LBSTRESN, na.rm = TRUE), 2), " – ",
+    min_max = str_c(
+      round(min(LBSTRESN, na.rm = TRUE), 2),
+      " – ",
       round(max(LBSTRESN, na.rm = TRUE), 2)
     ),
     .groups = "drop"
   ) |>
   mutate(
     LBTESTCD = case_when(
-      LBTESTCD == "HGB"  ~ "HGB, г/л",
+      LBTESTCD == "HGB" ~ "HGB, ммоль/л",
       LBTESTCD == "PLAT" ~ "PLAT, ×10⁹/л",
       TRUE ~ LBTESTCD
     )
@@ -576,13 +601,13 @@ stats_arm <- lb_long |>
 
 flextable(stats_arm) |>
   set_header_labels(
-    ARM          = "Группа лечения",
-    LBTESTCD     = "Показатель",
+    ARM = "Группа лечения",
+    LBTESTCD = "Показатель",
     n_nonmissing = "N (непустых)",
-    n_missing    = "Пропущено",
-    mean_sd      = "Среднее (СО)",
-    median_iqr   = "Медиана [Q1; Q3]",
-    min_max      = "Мин. – Макс."
+    n_missing = "Пропущено",
+    mean_sd = "Среднее (СО)",
+    median_iqr = "Медиана [Q1; Q3]",
+    min_max = "Мин. – Макс."
   ) |>
   autofit()
 ```
@@ -593,25 +618,31 @@ stats_apoe <- lb_long |>
   group_by(`Носитель ε4`, LBTESTCD) |>
   summarise(
     n_nonmissing = n() - sum(is.na(LBSTRESN)),
-    n_missing    = sum(is.na(LBSTRESN)),
-    mean_sd      = str_c(
-      round(mean(LBSTRESN, na.rm = TRUE), 2), " (",
-      round(sd(LBSTRESN, na.rm = TRUE), 2), ")"
+    n_missing = sum(is.na(LBSTRESN)),
+    mean_sd = str_c(
+      round(mean(LBSTRESN, na.rm = TRUE), 2),
+      " (",
+      round(sd(LBSTRESN, na.rm = TRUE), 2),
+      ")"
     ),
-    median_iqr   = str_c(
-      round(median(LBSTRESN, na.rm = TRUE), 2), " [",
-      round(quantile(LBSTRESN, 0.25, na.rm = TRUE), 2), "; ",
-      round(quantile(LBSTRESN, 0.75, na.rm = TRUE), 2), "]"
+    median_iqr = str_c(
+      round(median(LBSTRESN, na.rm = TRUE), 2),
+      " [",
+      round(quantile(LBSTRESN, 0.25, na.rm = TRUE), 2),
+      "; ",
+      round(quantile(LBSTRESN, 0.75, na.rm = TRUE), 2),
+      "]"
     ),
-    min_max      = str_c(
-      round(min(LBSTRESN, na.rm = TRUE), 2), " – ",
+    min_max = str_c(
+      round(min(LBSTRESN, na.rm = TRUE), 2),
+      " – ",
       round(max(LBSTRESN, na.rm = TRUE), 2)
     ),
     .groups = "drop"
   ) |>
   mutate(
     LBTESTCD = case_when(
-      LBTESTCD == "HGB"  ~ "HGB, г/л",
+      LBTESTCD == "HGB" ~ "HGB, ммоль/л",
       LBTESTCD == "PLAT" ~ "PLAT, ×10⁹/л",
       TRUE ~ LBTESTCD
     )
@@ -620,12 +651,12 @@ stats_apoe <- lb_long |>
 flextable(stats_apoe) |>
   set_header_labels(
     `Носитель ε4` = "Носительство ε4",
-    LBTESTCD      = "Показатель",
-    n_nonmissing  = "N (непустых)",
-    n_missing     = "Пропущено",
-    mean_sd       = "Среднее (СО)",
-    median_iqr    = "Медиана [Q1; Q3]",
-    min_max       = "Мин. – Макс."
+    LBTESTCD = "Показатель",
+    n_nonmissing = "N (непустых)",
+    n_missing = "Пропущено",
+    mean_sd = "Среднее (СО)",
+    median_iqr = "Медиана [Q1; Q3]",
+    min_max = "Мин. – Макс."
   ) |>
   autofit()
 ```
@@ -764,7 +795,8 @@ statistic_APOE_category <- apoe_bmi |>
   # категории переносятся в колонки, а числа и проценты в их значения
   pivot_wider(
     names_from = BMI_CATEGORY,
-    values_from = combined_num_per_2
+    values_from = combined_num_per_2,
+    values_fill = "0 (0%)" # если в группе нет участников какой-то категории
   )
 statistic_APOE_category
 ```
@@ -786,7 +818,7 @@ flextable(statistic_ARM_quant) |>
   ) |>
   autofit()
 ```
-Среднее значение ИМТ у участников данного скрининга в группе Placebo составил 23,65, в группе Xanomeline Low Dose 24,97, в группе Xanomeline High Dose 25,44. Средние значения во всех группах являются схожими, стандартные отклонения также имеют близкие значения (3,65-4,31), следовательно, степень разброса также является схожей между группами. Медианные значения близки к средним в каждой из групп и меквартильные интервалы также являются сопоставимыми (21,08; 25,72 - Placebo, 22,03; 27,90 - Xanomeline Low Dose, 22,99; 28,08 - Xanomeline Hight Dose). Участники исследования имели разные ИМТ начиная от недостаточной массы тела (<18.5), до избыточной массы тела (>=25). Минимальная масса тела составила 14.98, а максимальная 39,82. Данные ИМТ получены были у каждого из 254 участников, пропущенные значения отсутствуют.
+Среднее значение ИМТ у участников данного скрининга в группе Placebo составил 23,64, в группе Xanomeline Low Dose 24,96. Средние значения во всех группах являются схожими, стандартные отклонения также имеют близкие значения (3,64-4,31), следовательно, степень разброса также является схожей между группами. Медианные значения близки к средним в каждой из групп и меквартильные интервалы также являются сопоставимыми (21,08; 25,72 - Placebo, 22,03; 27,90 - Xanomeline Low Dose). Участники исследования имели разные ИМТ начиная от недостаточной массы тела (<18.5), до избыточной массы тела (>=25). Минимальная масса тела составила 15.67, а максимальная 39,82. Данные ИМТ получены были у каждого из 170 участников, пропущенные значения отсутствуют.
 ```{r}
 # statistic_APOE_quant
 flextable(statistic_APOE_quant) |>
@@ -843,32 +875,36 @@ flextable(statistic_APOE_category) |>
 # Число и процент участников с каждым генотипом APOE по группам лечения
 
 # создаем датасет для анализа 4 команды
-df_filtered <- full_data |> 
-  filter(ARM %in% c("Placebo", "Xanomeline Low Dose")) |>  
+df_filtered <- full_data |>
+  filter(ARM %in% c("Placebo", "Xanomeline Low Dose")) |>
   mutate(
     ARM = factor(ARM, levels = c("Placebo", "Xanomeline Low Dose")),
     BMI = `Weight_WEEK 4` / ((`Height_SCREENING 1` / 100)^2)
   )
 
 # расчет частоты генотипов
-apoe_distribution <- df_filtered |> 
-  group_by(ARM, `Генотип APOE`) |> 
-  summarise(n = n(), .groups = "drop_last") |> 
-  mutate(pct = (n / sum(n)) * 100) |> 
-  ungroup() |> 
-  mutate(count_pct = str_c(n, " (", round(pct, 2), "%)")) |> 
-  select(ARM, `Генотип APOE`, count_pct) |> 
-  pivot_wider(names_from = ARM, values_from = count_pct, values_fill = "0 (0.00%)")
+apoe_distribution <- df_filtered |>
+  group_by(ARM, `Генотип APOE`) |>
+  summarise(n = n(), .groups = "drop_last") |>
+  mutate(pct = (n / sum(n)) * 100) |>
+  ungroup() |>
+  mutate(count_pct = str_c(n, " (", round(pct, 2), "%)")) |>
+  select(ARM, `Генотип APOE`, count_pct) |>
+  pivot_wider(
+    names_from = ARM,
+    values_from = count_pct,
+    values_fill = "0 (0.00%)"
+  )
 
 # передаем готовую таблицу в функцию flextable
-apoe_distribution |> 
-  flextable() |> 
+apoe_distribution |>
+  flextable() |>
   set_header_labels(
     `Генотип APOE` = "Генотип APOE",
     Placebo = "Группа Placebo",
     `Xanomeline Low Dose` = "Группа Xanomeline Low Dose"
-  ) |> 
-  theme_vanilla() |> 
+  ) |>
+  theme_vanilla() |>
   autofit()
 ```
 
@@ -879,62 +915,70 @@ apoe_distribution |>
 # Статистики BMI и лабораторных показателей в зависимости от генотипа APOE
 
 # переводим показатели в длинный формат
-stats_long <- df_filtered |> 
-  select(ID, `Генотип APOE`, BMI, HGB, PLAT) |> 
+stats_long <- df_filtered |>
+  select(ID, `Генотип APOE`, BMI, HGB, PLAT) |>
   pivot_longer(
-    cols = c(BMI, HGB, PLAT), 
-    names_to = "Parameter", 
+    cols = c(BMI, HGB, PLAT),
+    names_to = "Parameter",
     values_to = "Value"
   )
 
 # расчет описательных медицинских статистик
-apoe_metrics_stats <- stats_long |> 
-  group_by(`Генотип APOE`, Parameter) |> 
+apoe_metrics_stats <- stats_long |>
+  group_by(`Генотип APOE`, Parameter) |>
   summarise(
     n_nonmissing = sum(!is.na(Value)),
     n_missing = sum(is.na(Value)),
     mean_sd = str_c(
-      round(mean(Value, na.rm = TRUE), 2), " (",
-      round(sd(Value, na.rm = TRUE), 2), ")"
+      round(mean(Value, na.rm = TRUE), 2),
+      " (",
+      round(sd(Value, na.rm = TRUE), 2),
+      ")"
     ),
     median_iqr = str_c(
-      round(median(Value, na.rm = TRUE), 2), " [",
-      round(quantile(Value, 0.25, na.rm = TRUE), 2), "; ",
-      round(quantile(Value, 0.75, na.rm = TRUE), 2), "]"
+      round(median(Value, na.rm = TRUE), 2),
+      " [",
+      round(quantile(Value, 0.25, na.rm = TRUE), 2),
+      "; ",
+      round(quantile(Value, 0.75, na.rm = TRUE), 2),
+      "]"
     ),
     min_max = str_c(
-      round(min(Value, na.rm = TRUE), 2), " – ",
+      round(min(Value, na.rm = TRUE), 2),
+      " – ",
       round(max(Value, na.rm = TRUE), 2)
     ),
     .groups = "drop"
-  ) |> 
-  mutate(Parameter = case_when(
-    Parameter == "BMI"  ~ "ИМТ (BMI), кг/м² (WEEK 4)",
-    Parameter == "HGB"  ~ "HGB (Гемоглобин), г/л",
-    Parameter == "PLAT" ~ "PLAT (Тромбоциты), ×10⁹/л",
-    TRUE ~ Parameter
-  ))
+  ) |>
+  mutate(
+    Parameter = case_when(
+      Parameter == "BMI" ~ "ИМТ (BMI), кг/м² (WEEK 4)",
+      Parameter == "HGB" ~ "HGB (Гемоглобин), ммоль/л",
+      Parameter == "PLAT" ~ "PLAT (Тромбоциты), ×10⁹/л",
+      TRUE ~ Parameter
+    )
+  )
 
 # передаем большую расчетную таблицу в flextable
-apoe_metrics_stats |> 
-  flextable() |> 
+apoe_metrics_stats |>
+  flextable() |>
   set_header_labels(
     `Генотип APOE` = "Генотип APOE",
-    Parameter     = "Показатель",
-    n_nonmissing  = "N (непустых)",
-    n_missing     = "Пропущено",
-    mean_sd       = "Среднее (СО)",
-    median_iqr    = "Медиана [Q1; Q3]",
-    min_max       = "Мин. – Макс."
-  ) |> 
-  merge_v(j = "Генотип APOE") |> 
-  theme_vanilla() |> 
-  fix_border_issues() |> 
+    Parameter = "Показатель",
+    n_nonmissing = "N (непустых)",
+    n_missing = "Пропущено",
+    mean_sd = "Среднее (СО)",
+    median_iqr = "Медиана [Q1; Q3]",
+    min_max = "Мин. – Макс."
+  ) |>
+  merge_v(j = "Генотип APOE") |>
+  theme_vanilla() |>
+  fix_border_issues() |>
   autofit()
 ```
 
 Медианные и средние значения ИМТ для большинства генотипов укладываются в диапазон клинической нормы (от 23.02 до 25.02 кг/м²). Несколько выделяется группа ε4/ε4 со средним ИМТ 28.41 кг/м², соответствующим избыточной массе тела, однако из-за малого объема группы делать клинические выводы о связи генотипа с весом нельзя. Максимальный ИМТ в выборке зафиксирован у носителя генотипа ε3/ε4 (40.0 кг/м²), а минимальный - у носителя ε3/ε3 (15.31 кг/м²).
-Показатели гемоглобина и тромбоцитов на скрининге демонстрируют стабильность во всех генетических группах. Средние значения гемоглобина варьируют от 7.76 г/л (у ε4/ε4) до 8.79 г/л (у ε2/ε3), а тромбоцитов — от 224.44 до 253.05 ×10⁹/л. Минимумы и максимумы совпадают с результатами из раздела 3.1
+Показатели гемоглобина и тромбоцитов на скрининге демонстрируют стабильность во всех генетических группах. Средние значения гемоглобина варьируют от 7.76 ммоль/л (у ε4/ε4) до 8.79 ммоль/л (у ε2/ε3), а тромбоцитов — от 224.44 до 253.05 ×10⁹/л. Минимумы и максимумы совпадают с результатами из раздела 3.1
 
 ## 4. Дополнительные задания
 
