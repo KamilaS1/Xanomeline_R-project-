@@ -995,6 +995,207 @@ apoe_metrics_stats |>
 # geom_boxplot, geom_violin
 # geom_point, geom_jitter
 # facet_wrap
+
+theme_set(theme_bw(base_size = 11))
+
+# единые цвета групп лечения для всех графиков
+arm_colors <- c(
+  "Placebo" = "grey60",
+  "Xanomeline Low Dose" = "steelblue"
+)
+
+# подписи панелей с единицами измерения (по столбцу LBSTRESU: HGB — mmol/L, PLAT — GI/L)
+lb_labels <- c(
+  HGB = "Гемоглобин (HGB), ммоль/л",
+  PLAT = "Тромбоциты (PLAT), ×10⁹/л"
+)
+```
+
+**графики для раздела 3.1** 
+
+```{r}
+lb_long |>
+  filter(!is.na(LBSTRESN)) |>
+  ggplot(aes(x = ARM, y = LBSTRESN, fill = ARM)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.8) +
+  facet_wrap(~LBTESTCD, scales = "free_y") +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    shape = 24,
+    size = 5,
+    fill = "white"
+  ) +
+  labs(x = NULL, y = "Значение на SCREENING 1") +
+  theme(legend.position = "none")
+```
+
+
+
+```{r}
+lb_long |>
+  filter(!is.na(LBSTRESN)) |>
+  ggplot(aes(x = `Носитель ε4`, y = LBSTRESN, fill = `Носитель ε4`)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  facet_wrap(~LBTESTCD, scales = "free_y") +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    shape = 24,
+    size = 5,
+    fill = "white"
+  ) +
+  labs(x = NULL, y = "Значение на SCREENING 1") +
+  theme(legend.position = "none")
+```
+
+**графики для раздела 3.2** 
+
+```{r}
+bmi_data |>
+  ggplot(aes(x = ARM, y = BMI, fill = ARM)) +
+  annotate(
+    "rect",
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = 18.5,
+    ymax = 25,
+    fill = "darkgreen",
+    alpha = 0.1
+  ) +
+  geom_violin(alpha = 0.3) +
+  geom_boxplot(width = 0.2, outlier.shape = NA) +
+  geom_jitter(width = 0.1, size = 1, alpha = 0.4) +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    shape = 23,
+    size = 3,
+    fill = "white"
+  ) +
+  scale_fill_manual(values = arm_colors) +
+  labs(x = NULL, y = "ИМТ на SCREENING 1, кг/м²") +
+  theme(legend.position = "none")
+```
+
+```{r}
+apoe_bmi |>
+  group_by(Apoe_num) |>
+  mutate(alleles = str_c(Apoe_num, "\n(n = ", n(), ")")) |>
+  ungroup() |>
+  ggplot(aes(x = alleles, y = BMI)) +
+  annotate(
+    "rect",
+    xmin = -Inf,
+    xmax = Inf,
+    ymin = 18.5,
+    ymax = 25,
+    fill = "darkgreen",
+    alpha = 0.1
+  ) +
+  geom_boxplot(outlier.shape = NA, fill = "khaki", alpha = 0.6) +
+  geom_jitter(width = 0.15, size = 1, alpha = 0.4) +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    shape = 23,
+    size = 3,
+    fill = "white"
+  ) +
+  labs(x = "Число аллелей ε4", y = "ИМТ на SCREENING 1, кг/м²")
+```
+
+```{r}
+bmi_data |>
+  count(ARM, BMI_CATEGORY) |>
+  group_by(ARM) |>
+  mutate(percent = n / sum(n) * 100) |>
+  ungroup() |>
+  ggplot(aes(x = ARM, y = percent, fill = BMI_CATEGORY)) +
+  geom_col(width = 0.6) +
+  geom_text(
+    aes(label = str_c(n, " (", round(percent, 1), "%)")),
+    position = position_stack(vjust = 0.5),
+    size = 3.5
+  ) +
+  scale_fill_manual(
+    values = c("Норма" = "darkseagreen", "Не норма" = "salmon")
+  ) +
+  labs(x = NULL, y = "Доля участников, %", fill = "Категория ИМТ")
+```
+
+```{r}
+apoe_bmi |>
+  count(Apoe_num, BMI_CATEGORY) |>
+  group_by(Apoe_num) |>
+  mutate(percent = n / sum(n) * 100) |>
+  ungroup() |>
+  ggplot(aes(x = factor(Apoe_num), y = percent, fill = BMI_CATEGORY)) +
+  geom_col(width = 0.6) +
+  geom_text(
+    aes(label = str_c(n, " (", round(percent, 1), "%)")),
+    position = position_stack(vjust = 0.5),
+    size = 3.5
+  ) +
+  scale_fill_manual(
+    values = c("Норма" = "darkseagreen", "Не норма" = "salmon")
+  ) +
+  labs(x = "Число аллелей ε4", y = "Доля участников, %", fill = "Категория ИМТ")
+```
+
+**графики для раздела 3.3** 
+
+```{r}
+df_filtered |>
+  count(ARM, `Генотип APOE`) |>
+  group_by(ARM) |>
+  mutate(percent = n / sum(n) * 100) |>
+  ungroup() |>
+  ggplot(aes(x = `Генотип APOE`, y = percent, fill = ARM)) +
+  geom_col(position = position_dodge(width = 0.9)) +
+  geom_text(
+    aes(label = n),
+    position = position_dodge(width = 0.9),
+    vjust = -0.4,
+    size = 3.5
+  ) +
+  scale_fill_manual(values = arm_colors) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(
+    x = "Генотип APOE",
+    y = "Доля участников в группе, %",
+    fill = "Группа лечения"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+param_labels <- c(
+  BMI = "ИМТ (WEEK 4), кг/м²",
+  lb_labels
+)
+
+stats_long |>
+  filter(!is.na(Value)) |>
+  ggplot(aes(x = `Генотип APOE`, y = Value, fill = `Генотип APOE`)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+  geom_jitter(width = 0.15, size = 0.8, alpha = 0.4) +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    shape = 23,
+    size = 2.5,
+    fill = "white"
+  ) +
+  facet_wrap(
+    ~Parameter,
+    scales = "free_y",
+    labeller = as_labeller(param_labels)
+  ) +
+  labs(x = "Генотип APOE", y = NULL) +
+  theme(legend.position = "none")
 ```
 
 ### 4.2. Таблицы gtsummary
