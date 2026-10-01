@@ -509,6 +509,53 @@ tibble(
   autofit()
 ```
 
+### 4.3. Заполнение пропущенных значений
+
+```{r}
+# Группируем участников по возрастным интервалам
+
+df_imputed <- full_data |> 
+  mutate(
+    AGE_GROUP = cut(
+      AGE, 
+      breaks = c(50, 60, 70, 80, 90), 
+      labels = c("50-59", "60-69", "70-79", "80-89"),
+      right = FALSE
+    )
+  )
+```
+
+```{r}
+# Вычисляем средние значения внутри групп
+
+group_means <- df_imputed |> 
+  group_by(SEX, AGE_GROUP) |> 
+  summarise(
+    mean_HGB = mean(HGB, na.rm = TRUE),
+    mean_PLAT = mean(PLAT, na.rm = TRUE),
+    mean_WT_SCR = mean(`Weight_SCREENING 1`, na.rm = TRUE),
+    mean_WT_WK4 = mean(`Weight_WEEK 4`, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+# Заменяем все пропуски на средние значения
+
+df_imputed <- df_imputed |> 
+  left_join(group_means, by = c("SEX", "AGE_GROUP")) |> 
+  mutate(
+    HGB = coalesce(HGB, mean_HGB),
+    PLAT = coalesce(PLAT, mean_PLAT),
+    `Weight_SCREENING 1` = coalesce(`Weight_SCREENING 1`, mean_WT_SCR),
+    `Weight_WEEK 4` = coalesce(`Weight_WEEK 4`, mean_WT_WK4)
+  ) |> 
+  select(-starts_with("mean_"))
+
+# Передаем данные без пропусков в основной датафрейм 
+full_data <- df_imputed
+```
+
 ## 3. Описательные статистики и отчёт
 
 Каждый выполняет свой подраздел в отдельной ветке, используя объединенные данные.
