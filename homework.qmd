@@ -1192,8 +1192,205 @@ stats_long |>
 ```{r}
 # См. документацию:
 # ?tbl_summary
+library(gtsummary) # установка пакетов
 ```
 
+```{r} 
+# превращаем таблицу в широкую, чтобы у показателей HGB и PLAT были в разных колонках
+lb_wide_1 <- lb_long |>
+  select(ARM, ID, LBTESTCD, LBSTRESN ) |>
+  pivot_wider(
+    names_from = LBTESTCD, # HGB и PLAT(категории анализов) будут в названиях колонок
+    values_from = LBSTRESN # численные значения уровней HGB и PLAT
+  )
+```
+
+```{r}
+# Статистика лабораторных показателей по группам
+statistics_arm_lb_quant <- lb_wide_1 |>
+  select(ARM, HGB, PLAT) |>
+      tbl_summary(
+        by = ARM,
+        type = all_continuous() ~ "continuous2",
+        statistic = all_continuous() ~ c( # расчет статистик - по одной строке на параметр 
+            "{mean} ({sd})",
+            "{median} ({p25}, {p75})",
+            "{min}, {max}",
+            "{N_nonmiss}",
+            "{N_miss}"
+    ),
+    label = list(
+      ARM = "Группа лечения",
+      HGB = "HGB, ммоль/л",
+      PLAT = "PLAT, ×10⁹/л "
+    )
+  )|>
+    modify_header(label ~ "Показатель")
+statistics_arm_lb_quant$table_body <- statistics_arm_lb_quant$table_body |>
+  filter(label != "Unknown") # фильтрация чтоб не дублировалась строка "Unknown"
+statistics_arm_lb_quant
+```
+
+```{r}
+# создаем широкую таблицу, чтобы показатели HGB и PLAT были в разных колонках (и статистики были подсчитаны отдельно для каждой группы анализов)
+lb_wide_2 <- lb_long |>
+  select(ARM, ID, LBTESTCD, LBSTRESN, `Носитель ε4` ) |>
+  pivot_wider(
+    names_from = LBTESTCD,
+    values_from = LBSTRESN
+  )
+```
+```{r}
+# Статистика лабораторных показателей по носителям
+# Подсчет статистик с функцией tbl_summary()
+statistics_arm_lb_cat <- lb_wide_2 |>
+  select(`Носитель ε4`, HGB, PLAT) |>
+  #
+      tbl_summary(
+        by = `Носитель ε4`,
+        type = all_continuous() ~ "continuous2",
+        statistic = all_continuous() ~ c(
+            "{mean} ({sd})",
+            "{median} ({p25}, {p75})",
+            "{min}, {max}",
+            "{N_nonmiss}",
+            "{N_miss}"
+    ),
+    label = list(
+      ARM = "Носитель ε4",
+      HGB = "HGB, ммоль/л",
+      PLAT = "PLAT, ×10⁹/л "
+    )
+  )|>
+    modify_header(label ~ "Показатель")
+statistics_arm_lb_cat$table_body <- statistics_arm_lb_cat$table_body |>
+  filter(label != "Unknown") # фильтрация чтоб не дублировалась строка "Unknown"
+statistics_arm_lb_cat
+```
+
+```{r}
+# статистика по количественным показателям по группам (с помощью функции tbl_summary())
+statistic_ARM_vs_quant <- bmi_data |>
+  select(ARM,BMI) |>
+  tbl_summary(
+    by = ARM,
+        type = all_continuous() ~ "continuous2",
+        statistic = all_continuous() ~ c(
+            "{mean} ({sd})",
+            "{median} ({p25}, {p75})",
+            "{min}, {max}",
+            "{N_nonmiss}",
+            "{N_miss}"
+    ),
+    label = list(
+      ARM = "Группа лечения",
+      BMI = "ИМТ на скрининге"
+    )
+  )|>
+    modify_header(label ~ "Показатель")
+statistic_ARM_vs_quant
+```
+
+```{r}
+# категория норма/не норма по группам
+statistic_ARM_vs_cat <- bmi_data |>
+  select(ARM,BMI_CATEGORY) |>
+  tbl_summary(
+    by = ARM,
+    statistic = all_categorical() ~ "{n} ({p}%)",
+    percent = "column",
+    label = list(
+      ARM = "Группа лечения",
+      BMI_CATEGORY = "Категория ИМТ"
+    )
+  )|>
+    modify_header(label ~ "Показатель")
+statistic_ARM_vs_cat
+```
+
+```{r}
+# количественная статистика по APOE 
+statistic_APOE_vs_quant <- apoe_bmi |>
+  select(Apoe_num,BMI) |>
+  tbl_summary(
+    by = Apoe_num,
+        type = all_continuous() ~ "continuous2",
+        statistic = all_continuous() ~ c(
+            "{mean} ({sd})",
+            "{median} ({p25}, {p75})",
+            "{min}, {max}",
+            "{N_nonmiss}",
+            "{N_miss}"
+    ),
+    label = list(
+      Apoe_num = "Число аллелей ε4",
+      BMI = "ИМТ на скрининге"
+    )
+  )|>
+    modify_header(label ~ "Показатель")
+statistic_APOE_vs_quant
+```
+
+```{r}
+# по категориям норма/не норма по APOE
+statistic_APOE_vs_cat <- apoe_bmi |>
+  select(Apoe_num, BMI_CATEGORY) |>
+  tbl_summary(
+    by = Apoe_num,
+    statistic = all_categorical() ~ "{n} ({p}%)",
+    percent = "column",
+    label = list(
+      Apoe_num = "Число аллелей ε4",
+      BMI_CATEGORY = "Категория ИМТ"
+    )
+  )|>
+    modify_header(label ~ "Показатель")
+statistic_APOE_vs_cat
+```
+
+```{r}
+# Число и процент участников с каждым генотипом APOE по группам лечения
+apoe_category_stat <- df_filtered |>
+  select(ARM, `Генотип APOE`) |>
+  tbl_summary(
+    by = ARM,
+    statistic = all_categorical() ~ "{n} ({p}%)",
+    percent = "column",
+    label = list(
+      ARM = "Группа лечения",
+      `Генотип APOE` = "Генотип APOE"
+    )
+  ) |>
+    modify_header(label ~ "Показатель")
+apoe_category_stat
+```
+
+```{r}
+# Статистики BMI и лабораторных показателей в зависимости от генотипа APOE
+apoe_quant_stat <- df_filtered |>
+  select(`Генотип APOE`, BMI, PLAT, HGB) |>
+  tbl_summary(
+    by = `Генотип APOE`,
+        type = all_continuous() ~ "continuous2",
+        statistic = all_continuous() ~ c(
+            "{mean} ({sd})",
+            "{median} ({p25}, {p75})",
+            "{min}, {max}",
+            "{N_nonmiss}",
+            "{N_miss}"
+    ),
+    label = list(
+      `Генотип APOE` = "Генотип APOE",
+      BMI = "ИМТ (BMI), кг/м² (WEEK 4)",
+      HGB = "HGB (Гемоглобин), ммоль/л",
+      PLAT = "PLAT (Тромбоциты), ×10⁹/л"
+    )
+  ) |>
+  modify_header(label ~ "Показатель")
+apoe_quant_stat$table_body <- apoe_quant_stat$table_body |>
+  filter(label != "Unknown") # фильтрация чтоб не дублировалась строка "Unknown"
+apoe_quant_stat
+```
 ### 4.3. Заполнение пропущенных значений
 
 Создайте и загрузите на GitHub экспериментальную ветку `imputation`.
