@@ -995,20 +995,6 @@ apoe_metrics_stats |>
 # geom_boxplot, geom_violin
 # geom_point, geom_jitter
 # facet_wrap
-
-theme_set(theme_bw(base_size = 11))
-
-# единые цвета групп лечения для всех графиков
-arm_colors <- c(
-  "Placebo" = "grey60",
-  "Xanomeline Low Dose" = "steelblue"
-)
-
-# подписи панелей с единицами измерения (по столбцу LBSTRESU: HGB — mmol/L, PLAT — GI/L)
-lb_labels <- c(
-  HGB = "Гемоглобин (HGB), ммоль/л",
-  PLAT = "Тромбоциты (PLAT), ×10⁹/л"
-)
 ```
 
 **графики для раздела 3.1** 
