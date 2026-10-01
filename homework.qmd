@@ -514,11 +514,11 @@ tibble(
 ```{r}
 # Группируем участников по возрастным интервалам
 
-df_imputed <- full_data |> 
+df_imputed <- full_data |>
   mutate(
     AGE_GROUP = cut(
-      AGE, 
-      breaks = c(50, 60, 70, 80, 90), 
+      AGE,
+      breaks = c(50, 60, 70, 80, 90),
       labels = c("50-59", "60-69", "70-79", "80-89"),
       right = FALSE
     )
@@ -528,8 +528,8 @@ df_imputed <- full_data |>
 ```{r}
 # Вычисляем средние значения внутри групп
 
-group_means <- df_imputed |> 
-  group_by(SEX, AGE_GROUP) |> 
+group_means <- df_imputed |>
+  group_by(SEX, AGE_GROUP) |>
   summarise(
     mean_HGB = mean(HGB, na.rm = TRUE),
     mean_PLAT = mean(PLAT, na.rm = TRUE),
@@ -542,17 +542,17 @@ group_means <- df_imputed |>
 ```{r}
 # Заменяем все пропуски на средние значения
 
-df_imputed <- df_imputed |> 
-  left_join(group_means, by = c("SEX", "AGE_GROUP")) |> 
+df_imputed <- df_imputed |>
+  left_join(group_means, by = c("SEX", "AGE_GROUP")) |>
   mutate(
     HGB = coalesce(HGB, mean_HGB),
     PLAT = coalesce(PLAT, mean_PLAT),
     `Weight_SCREENING 1` = coalesce(`Weight_SCREENING 1`, mean_WT_SCR),
     `Weight_WEEK 4` = coalesce(`Weight_WEEK 4`, mean_WT_WK4)
-  ) |> 
+  ) |>
   select(-starts_with("mean_"))
 
-# Передаем данные без пропусков в основной датафрейм 
+# Передаем данные без пропусков в основной датафрейм
 full_data <- df_imputed
 ```
 
@@ -894,7 +894,7 @@ flextable(statistic_ARM_category) |>
   ) |>
   autofit()
 ```
-Доля пациентов с нормальной ИМТ составила 63,95% для группы Placebo, для группы Xanomeline Low Dose - 54,76%, а для Xanomeline High Dose также 54,76%. В группе Placebo на 9,19% больше людей с нормальной ИМТ(от 18.5 до 25), чем в других. Следовательно в группе Placebo ниже процент людей с ненормальным ИМТ (больше 25) - 36,05%, когда в группах Xanomeline Low Dose и Xanomeline High Dose их процент составил 45,24.
+Доля пациентов с нормальной ИМТ составила 63,95% для группы Placebo и 54,76% для группы Xanomeline Low Dose. В группе Placebo на 9,19% больше людей с нормальной ИМТ(от 18.5 до 25), чем в группе Xanomeline Low Dose. Следовательно в группе Placebo ниже процент людей с ненормальным ИМТ (больше 25) - 36,05%, когда в группе Xanomeline Low Dose их процент составил 45,24.
 ```{r}
 # flextable для statistic_APOE_category
 flextable(statistic_APOE_category) |>
@@ -1042,6 +1042,17 @@ apoe_metrics_stats |>
 # geom_boxplot, geom_violin
 # geom_point, geom_jitter
 # facet_wrap
+
+arm_colors <- c(
+  "Placebo" = "grey60",
+  "Xanomeline Low Dose" = "steelblue",
+  "Xanomeline High Dose" = "firebrick"
+)
+
+lb_labels <- c(
+  HGB = "Гемоглобин (HGB), ммоль/л",
+  PLAT = "Тромбоциты (PLAT), ×10⁹/л"
+)
 ```
 
 **графики для раздела 3.1** 
@@ -1245,7 +1256,7 @@ library(gtsummary) # установка пакетов
 ```{r} 
 # превращаем таблицу в широкую, чтобы у показателей HGB и PLAT были в разных колонках
 lb_wide_1 <- lb_long |>
-  select(ARM, ID, LBTESTCD, LBSTRESN ) |>
+  select(ARM, ID, LBTESTCD, LBSTRESN) |>
   pivot_wider(
     names_from = LBTESTCD, # HGB и PLAT(категории анализов) будут в названиях колонок
     values_from = LBSTRESN # численные значения уровней HGB и PLAT
@@ -1256,23 +1267,24 @@ lb_wide_1 <- lb_long |>
 # Статистика лабораторных показателей по группам
 statistics_arm_lb_quant <- lb_wide_1 |>
   select(ARM, HGB, PLAT) |>
-      tbl_summary(
-        by = ARM,
-        type = all_continuous() ~ "continuous2",
-        statistic = all_continuous() ~ c( # расчет статистик - по одной строке на параметр 
-            "{mean} ({sd})",
-            "{median} ({p25}, {p75})",
-            "{min}, {max}",
-            "{N_nonmiss}",
-            "{N_miss}"
+  tbl_summary(
+    by = ARM,
+    type = all_continuous() ~ "continuous2",
+    statistic = all_continuous() ~ c(
+      # расчет статистик - по одной строке на параметр
+      "{mean} ({sd})",
+      "{median} ({p25}, {p75})",
+      "{min}, {max}",
+      "{N_nonmiss}",
+      "{N_miss}"
     ),
     label = list(
       ARM = "Группа лечения",
       HGB = "HGB, ммоль/л",
       PLAT = "PLAT, ×10⁹/л "
     )
-  )|>
-    modify_header(label ~ "Показатель")
+  ) |>
+  modify_header(label ~ "Показатель")
 statistics_arm_lb_quant$table_body <- statistics_arm_lb_quant$table_body |>
   filter(label != "Unknown") # фильтрация чтоб не дублировалась строка "Unknown"
 statistics_arm_lb_quant
@@ -1281,7 +1293,7 @@ statistics_arm_lb_quant
 ```{r}
 # создаем широкую таблицу, чтобы показатели HGB и PLAT были в разных колонках (и статистики были подсчитаны отдельно для каждой группы анализов)
 lb_wide_2 <- lb_long |>
-  select(ARM, ID, LBTESTCD, LBSTRESN, `Носитель ε4` ) |>
+  select(ARM, ID, LBTESTCD, LBSTRESN, `Носитель ε4`) |>
   pivot_wider(
     names_from = LBTESTCD,
     values_from = LBSTRESN
@@ -1293,23 +1305,23 @@ lb_wide_2 <- lb_long |>
 statistics_arm_lb_cat <- lb_wide_2 |>
   select(`Носитель ε4`, HGB, PLAT) |>
   #
-      tbl_summary(
-        by = `Носитель ε4`,
-        type = all_continuous() ~ "continuous2",
-        statistic = all_continuous() ~ c(
-            "{mean} ({sd})",
-            "{median} ({p25}, {p75})",
-            "{min}, {max}",
-            "{N_nonmiss}",
-            "{N_miss}"
+  tbl_summary(
+    by = `Носитель ε4`,
+    type = all_continuous() ~ "continuous2",
+    statistic = all_continuous() ~ c(
+      "{mean} ({sd})",
+      "{median} ({p25}, {p75})",
+      "{min}, {max}",
+      "{N_nonmiss}",
+      "{N_miss}"
     ),
     label = list(
       ARM = "Носитель ε4",
       HGB = "HGB, ммоль/л",
       PLAT = "PLAT, ×10⁹/л "
     )
-  )|>
-    modify_header(label ~ "Показатель")
+  ) |>
+  modify_header(label ~ "Показатель")
 statistics_arm_lb_cat$table_body <- statistics_arm_lb_cat$table_body |>
   filter(label != "Unknown") # фильтрация чтоб не дублировалась строка "Unknown"
 statistics_arm_lb_cat
@@ -1318,30 +1330,30 @@ statistics_arm_lb_cat
 ```{r}
 # статистика по количественным показателям по группам (с помощью функции tbl_summary())
 statistic_ARM_vs_quant <- bmi_data |>
-  select(ARM,BMI) |>
+  select(ARM, BMI) |>
   tbl_summary(
     by = ARM,
-        type = all_continuous() ~ "continuous2",
-        statistic = all_continuous() ~ c(
-            "{mean} ({sd})",
-            "{median} ({p25}, {p75})",
-            "{min}, {max}",
-            "{N_nonmiss}",
-            "{N_miss}"
+    type = all_continuous() ~ "continuous2",
+    statistic = all_continuous() ~ c(
+      "{mean} ({sd})",
+      "{median} ({p25}, {p75})",
+      "{min}, {max}",
+      "{N_nonmiss}",
+      "{N_miss}"
     ),
     label = list(
       ARM = "Группа лечения",
       BMI = "ИМТ на скрининге"
     )
-  )|>
-    modify_header(label ~ "Показатель")
+  ) |>
+  modify_header(label ~ "Показатель")
 statistic_ARM_vs_quant
 ```
 
 ```{r}
 # категория норма/не норма по группам
 statistic_ARM_vs_cat <- bmi_data |>
-  select(ARM,BMI_CATEGORY) |>
+  select(ARM, BMI_CATEGORY) |>
   tbl_summary(
     by = ARM,
     statistic = all_categorical() ~ "{n} ({p}%)",
@@ -1350,31 +1362,31 @@ statistic_ARM_vs_cat <- bmi_data |>
       ARM = "Группа лечения",
       BMI_CATEGORY = "Категория ИМТ"
     )
-  )|>
-    modify_header(label ~ "Показатель")
+  ) |>
+  modify_header(label ~ "Показатель")
 statistic_ARM_vs_cat
 ```
 
 ```{r}
-# количественная статистика по APOE 
+# количественная статистика по APOE
 statistic_APOE_vs_quant <- apoe_bmi |>
-  select(Apoe_num,BMI) |>
+  select(Apoe_num, BMI) |>
   tbl_summary(
     by = Apoe_num,
-        type = all_continuous() ~ "continuous2",
-        statistic = all_continuous() ~ c(
-            "{mean} ({sd})",
-            "{median} ({p25}, {p75})",
-            "{min}, {max}",
-            "{N_nonmiss}",
-            "{N_miss}"
+    type = all_continuous() ~ "continuous2",
+    statistic = all_continuous() ~ c(
+      "{mean} ({sd})",
+      "{median} ({p25}, {p75})",
+      "{min}, {max}",
+      "{N_nonmiss}",
+      "{N_miss}"
     ),
     label = list(
       Apoe_num = "Число аллелей ε4",
       BMI = "ИМТ на скрининге"
     )
-  )|>
-    modify_header(label ~ "Показатель")
+  ) |>
+  modify_header(label ~ "Показатель")
 statistic_APOE_vs_quant
 ```
 
@@ -1390,8 +1402,8 @@ statistic_APOE_vs_cat <- apoe_bmi |>
       Apoe_num = "Число аллелей ε4",
       BMI_CATEGORY = "Категория ИМТ"
     )
-  )|>
-    modify_header(label ~ "Показатель")
+  ) |>
+  modify_header(label ~ "Показатель")
 statistic_APOE_vs_cat
 ```
 
@@ -1408,7 +1420,7 @@ apoe_category_stat <- df_filtered |>
       `Генотип APOE` = "Генотип APOE"
     )
   ) |>
-    modify_header(label ~ "Показатель")
+  modify_header(label ~ "Показатель")
 apoe_category_stat
 ```
 
@@ -1418,13 +1430,13 @@ apoe_quant_stat <- df_filtered |>
   select(`Генотип APOE`, BMI, PLAT, HGB) |>
   tbl_summary(
     by = `Генотип APOE`,
-        type = all_continuous() ~ "continuous2",
-        statistic = all_continuous() ~ c(
-            "{mean} ({sd})",
-            "{median} ({p25}, {p75})",
-            "{min}, {max}",
-            "{N_nonmiss}",
-            "{N_miss}"
+    type = all_continuous() ~ "continuous2",
+    statistic = all_continuous() ~ c(
+      "{mean} ({sd})",
+      "{median} ({p25}, {p75})",
+      "{min}, {max}",
+      "{N_nonmiss}",
+      "{N_miss}"
     ),
     label = list(
       `Генотип APOE` = "Генотип APOE",
